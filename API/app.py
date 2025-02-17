@@ -8,35 +8,50 @@ app = Flask(__name__)
 data_file = '../data.json'
 
 def save_data(data):
-    # Required keys
-    required_keys = ["ip", "mac", "deviceName"]
+    print(data)
+    required_keys = ['ip', 'robotCarID', 'mac', 'deviceName']
     
-    # Check if all required keys exist in the data
+    # Check that the required keys exist in the incoming data
     for key in required_keys:
         if key not in data:
-            return {"error": f"{key} key does not exist"}, 300
+            return {"message": f"Key {key} does not exist"}, 403
 
-    # Decide where to save the data
-    if 'camera_feed' in data:
-        key_to_use = 'ESP'
+    robotCarID = str(data['robotCarID'])
+    data.pop("robotCarID")  # Remove robotCarID from data to avoid overwriting
+
+    # Read existing data from the JSON file
+    with open(data_file, "r") as f:
+        file_data = json.load(f)
+
+    # Ensure the RobotCarIDs key exists
+    if "RobotCarIDs" not in file_data:
+        file_data["RobotCarIDs"] = {}
+
+    # If robotCarID doesn't exist, create it
+    if robotCarID not in file_data["RobotCarIDs"]:
+        file_data["RobotCarIDs"][robotCarID] = {}
+
+    # Check if the data includes the 'camera_feed' key
+    if "camera_feed" in data:
+        # If it contains camera_feed, update or add it directly under the robotCarID
+        file_data["RobotCarIDs"][robotCarID]["ip"] = data["ip"]
+        file_data["RobotCarIDs"][robotCarID]["mac"] = data["mac"]
+        file_data["RobotCarIDs"][robotCarID]["deviceName"] = data["deviceName"]
+        file_data["RobotCarIDs"][robotCarID]["camera_feed"] = data["camera_feed"]
     else:
-        key_to_use = 'Arduino'
-    
-    # Load existing data
-    try:
-        with open(data_file, "r") as f:
-            file_data = json.load(f)
-    except json.JSONDecodeError:  # Handle empty file or invalid JSON
-        file_data = {"Arduino": [], "ESP": []}
+        # If no camera_feed, it must be the Arduino data, so add it under 'Arduino'
+        file_data["RobotCarIDs"][robotCarID]["Arduino"] = {
+            "ip": data["ip"],
+            "mac": data["mac"],
+            "deviceName": data["deviceName"]
+        }
 
-    # Append new data to the appropriate key
-    file_data[key_to_use].append(data)
-    
-    # Write updated data back to the file
+    # Write the updated data back to the JSON file
     with open(data_file, "w") as f:
         json.dump(file_data, f, indent=4)
 
-    return jsonify({"status": "success", "data": data}), 200
+    return {"message": "success"}, 200
+
 
 
 @app.route('/init/', methods=['POST'])

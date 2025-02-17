@@ -12,44 +12,62 @@ def get_data_file_path():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_dir, '..', 'data.json')
 
+from flask import Flask, request, jsonify
 
+app = Flask(__name__)
 
-@app.route('/update-custom-name', methods=['PUT'])
-def update_custom_name():
-    file_path = get_data_file_path()
-    request_data = request.json
+@app.route('/start-car-arduino', methods=['POST'])
+def start_car_arduino():
+    # Parse the incoming JSON data
+    data = request.get_json()
 
-    ip_to_update = request_data.get('ip')  # IP of the device
-    new_custom_name = request_data.get('custom_name')  # New custom name
+    # Validate if both 'ip' and 'module' are present in the request
+    ip = data.get('ip')
+    module = data.get('module')
 
-    if not ip_to_update or not new_custom_name:
-        return jsonify({"error": "Both 'ip' and 'custom_name' are required"}), 400
+    if not ip or not module:
+        return jsonify({"error": "Both IP and module are required."}), 400
 
     try:
-        # Read the current data
-        with open(file_path, 'r') as json_file:
-            data = json.load(json_file)
+        # Logic to start the car (replace this with actual logic to start the car)
+        # Example: call some Arduino interface or device control system
+        # For now, we'll just simulate success.
 
-        # Check if data is a list of devices
-        if not isinstance(data, list):
-            return jsonify({"error": "Data is not in the expected format"}), 500
+        # If you successfully start the car, return a success message
+        return jsonify({
+            "message": f"Car with IP: {ip} and Module: {module} started successfully!"
+        }), 200
 
-        # Find the device with the matching IP
-        device_found = False
-        for device in data:
-            if device.get('ip') == ip_to_update:
-                device['custom_name'] = new_custom_name  # Update the custom name
-                device_found = True
-                break
+    except Exception as e:
+        # Handle any unexpected errors
+        return jsonify({"error": "Failed to start car on Arduino", "details": str(e)}), 500
 
-        if not device_found:
-            return jsonify({"error": f"Device with IP '{ip_to_update}' not found"}), 404
 
-        # Write the updated data back to the file
-        with open(file_path, 'w') as json_file:
-            json.dump(data, json_file, indent=2)
+@app.route('/updateCustomName', methods=['PUT'])
+def update_custom_name():
+    try:
+        file_path = get_data_file_path()
+        data = request.get_json()
+        robot_car_id = data.get('robotCarId')
+        new_custom_name = data.get('customRobotName')
 
-        return jsonify({"message": f"Custom name for device with IP '{ip_to_update}' updated successfully"}), 200
+        print(robot_car_id)
+        print(new_custom_name)
+        if new_custom_name != '' and robot_car_id != '':
+            
+
+            with open(file_path, 'r') as json_file:
+                data = json.load(json_file)
+
+                print(new_custom_name)
+                # data['RobotCarIDs'][str(robot_car_id)]['customName'] = customRobotName
+                print(data['RobotCarIDs'][str(robot_car_id)]['customName'])
+
+                with open(file_path, 'w') as json_file:
+                    json.dump(data, json_file, indent=2)
+                    return jsonify({'message': 'Custom name updated'}), 200
+
+        return jsonify({"error": "Missing RobotCarId or customName key"}), 400
 
     except FileNotFoundError:
         return jsonify({"error": "data.json file not found"}), 404
@@ -57,6 +75,7 @@ def update_custom_name():
         return jsonify({"error": "Error decoding JSON"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
     
 @app.route('/clear-data', methods=['POST'])
 def clear_data():
@@ -115,42 +134,39 @@ def delete_key():
 
 @app.route('/update-best-time', methods=['PUT'])
 def update_best_time():
+    data = request.get_json()
+    ip = data.get('ip')
+    new_best_time = data.get('best_time')
+
+    # Debugging: Log the received data
+    print(f"Received data: IP = {ip}, Best Time = {new_best_time}")
+
+    if not ip or not new_best_time:
+        return jsonify({'error': 'IP and best_time are required'}), 400
+
+    # Load existing data
     file_path = get_data_file_path()
-    try:
-        # Parse request data
-        request_data = request.json
-        ip = request_data.get('ip')  # Robot IP
-        best_time = request_data.get('best_time')  # New best time
+    with open(file_path, 'r') as f:
+        robot_data = json.load(f)
 
-        if not ip or not best_time:
-            return jsonify({"error": "IP and best_time are required"}), 400
+    # Find the robot car by IP and update the best time
+    for robot_id, robot in robot_data['RobotCarIDs'].items():
+        if robot['ip'] == ip:
+            # Debugging: Log the current best time before updating
+            print(f"Current best time for {ip}: {robot.get('best_time')}")
+            robot['best_time'] = new_best_time
+            # Debugging: Log the new best time after updating
+            print(f"Updated best time for {ip}: {new_best_time}")
+            break
+    else:
+        return jsonify({'error': 'Robot car not found'}), 404
 
-        # Read current data
-        with open(file_path, 'r') as json_file:
-            data = json.load(json_file)
+    # Save the updated data back to the file
+    with open(file_path, 'w') as f:
+        json.dump(robot_data, f, indent=4)
 
-        # Find and update the relevant robot
-        updated = False
-        for device in data:
-            if device.get('ip') == ip:
-                device['best_time'] = best_time
-                updated = True
-                break
+    return jsonify({'message': 'Best time updated successfully'}), 200
 
-        if not updated:
-            return jsonify({"error": f"No device found with IP {ip}"}), 404
-
-        # Write updated data back to the file
-        with open(file_path, 'w') as json_file:
-            json.dump(data, json_file, indent=2)
-
-        return jsonify({"message": f"Best time for IP {ip} updated successfully"}), 200
-    except FileNotFoundError:
-        return jsonify({"error": "data.json file not found"}), 404
-    except json.JSONDecodeError:
-        return jsonify({"error": "Error decoding JSON"}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 @app.route("/")
 def index():

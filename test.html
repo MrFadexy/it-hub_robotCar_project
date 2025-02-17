@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Page Title</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+
+</head>
+<body>
+
+<div class="container">
+    <div class="row my-3">
+        <div class="col">
+            <a class="btn btn-danger" onclick="deleteRobotCars()">
+                <i class="bi bi-trash"></i>
+            </a>
+            <a class="btn btn-primary" onclick="syncRobotCars()">
+                <i class="bi bi-arrow-clockwise"></i>
+            </a>
+        </div>
+        <div class="col">
+            <div class="row">
+                <div class="col">
+                    <select>
+                        <option>Line Tracking</option>
+                        <option>Object Avoidance</option>
+                        <option>Color Path</option>
+                        <option>Line Tracking + Object Avoidance</option>
+                    </select>
+                </div>
+                <div class="col">
+                    <a class="btn btn-primary">Start geselecteerde robots</a>
+                    <a class="btn btn-primary">Start alle robots</a>
+                </div>
+            </div>
+        </div>
+    </div>
+	<div class="robotCarContainer row">
+    	
+    </div>
+</div>
+<script>
+
+var robotCarsData = JSON.parse(`
+    {
+        "RobotCarIDs": {
+            "1": {
+                "ip": "192.168.178.109",
+                "mac": "FC:E8:C0:CE:42:EC",
+                "deviceName": "esp32-CE42EC",
+                "camera_feed": "http://192.168.178.109/stream",
+                "Arduino": {
+                    "ip": "192.168.178.108",
+                    "mac": "ABC123",
+                    "deviceName": "Arduino device"
+                }
+            },
+            "2": {
+                "ip": "192.168.178.110",
+                "mac": "FC:E8:C0:CE:42:EC",
+                "deviceName": "esp32-CE42EC",
+                "camera_feed": "http://192.168.178.109/stream",
+                "Arduino": {
+                    "ip": "192.168.178.111",
+                    "mac": "ABC123",
+                    "deviceName": "Arduino device"
+                }
+            },
+            "4": {
+                "ip": "192.168.178.110",
+                "mac": "FC:E8:C0:CE:42:EC",
+                "deviceName": "esp32-CE42EC",
+                "camera_feed": "http://192.168.178.109/stream",
+                "Arduino": {
+                    "ip": "192.168.178.111",
+                    "mac": "ABC123",
+                    "deviceName": "Arduino device"
+                }
+            }
+        }
+    }
+`)['RobotCarIDs'];
+
+var currentRobots = [];
+
+console.log(robotCarsData);
+
+function syncRobotCars() {
+    const parent = document.getElementsByClassName("robotCarContainer")[0];
+
+    console.log(parent.children);
+
+    // for(let i = 0; i < )
+
+    // currentRobots =
+}
+
+function loadRobotCars() {
+    const parent = document.getElementsByClassName("robotCarContainer")[0];
+
+    console.log(parent);
+
+    for (const i in robotCarsData) {
+        let robotCar = robotCarsData[i];
+        console.log(robotCar);
+        let card = `
+            <div id="` + i + `" class="card" style="width: 18rem;">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col">
+                            <h5 class="card-title">` + robotCar.ip + `</h5>
+                        </div>
+                        <div class="col">
+                            <a class="btn">
+                                <i class="bi bi-pencil-square"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <img src="https://placehold.co/200x100" class="card-img-top" alt="...">
+                </div>
+            </div>
+        `;
+        parent.innerHTML += card;
+        currentRobots.push(i);
+    }
+}
+
+function deleteRobotCars() {
+    Swal.fire({
+        title: "Weet je zeker dat je alle robotauto's wilt verwijderen?",
+        icon: "question",
+        iconHtml: "!",
+        confirmButtonText: "Verwijder",
+        cancelButtonText: "Annuleer",
+        showCancelButton: true,
+        showCloseButton: true
+    });
+}
+
+console.log();
+
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>loadRobotCars();</script>
+</body>
+</html>

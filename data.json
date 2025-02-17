@@ -1,1 +1,42 @@
-[]
+{
+  "RobotCarIDs": {
+    "1": {
+      "ip": "192.168.1.100",
+      "mac": "FC:E8:C0:CE:42:EC",
+      "deviceName": "esp32-CE42EC",
+      "camera_feed": "http://192.168.1.100/stream",
+      "Arduino": {
+        "ip": "192.168.1.101",
+        "mac": "ABC123",
+        "deviceName": "Arduino device"
+      },
+      "customName": "Test"
+    },
+    "2": {
+      "ip": "192.168.1.102",
+      "mac": "FC:E8:C0:CE:42:EC",
+      "deviceName": "esp32-CE42EC",
+      "camera_feed": "http://192.168.1.100/stream",
+      "Arduino": {
+        "ip": "192.168.1.103",
+        "mac": "ABC123",
+        "deviceName": "Arduino device"
+      },
+      "bestTime": "06:50",
+      "customName": "Test"
+    },
+    "3": {
+      "ip": "192.168.1.104",
+      "mac": "FC:E8:C0:CE:42:EC",
+      "deviceName": "esp32-CE42EC",
+      "camera_feed": "http://192.168.1.100/stream",
+      "Arduino": {
+        "ip": "192.168.1.105",
+        "mac": "ABC123",
+        "deviceName": "Arduino device"
+      },
+      "bestTime": "07:45",
+      "customName": "Test"
+    }
+  }
+}

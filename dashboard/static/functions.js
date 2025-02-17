@@ -1,408 +1,293 @@
-function clearAll() {
-  // Use SweetAlert2 for confirmation popup
-  Swal.fire({
-      title: 'Verwijderen data?',
-      text: "Weet je zeker dat je alle robotauto data wilt verwijderen?",
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#d33',
-      cancelButtonColor: '#3085d6',
-      confirmButtonText: 'Ja, verwijder!',
-      cancelButtonText: 'Annuleer'
-  }).then((result) => {
-      if (result.isConfirmed) {
-          // Clear the card-container innerHTML
-          const parentContainer = document.getElementById("card-container");
-          if (parentContainer) {
-              parentContainer.innerHTML = ""; // Remove all child elements
-              console.log("Card container cleared.");
-          }
+let robotCarsData; // Declare it globally
+var currentRobots = [];
+let timer = false;
+let carsTimer = [];
 
-          // Call the server to clear the data.json file
-          fetch('/clear-data', {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-              },
-          })
-          .then((response) => {
-              if (response.ok) {
-                  return response.json();
-              } else {
-                  throw new Error('Failed to clear data.json');
-              }
-          })
-          .then((data) => {
-              Swal.fire(
-                  'Verwijderd!',
-                  'Alle data is verwijderd.',
-                  'success'
-              );
-          })
-          .catch((error) => {
-              console.error('Error:', error);
-              Swal.fire(
-                  'Oeps!',
-                  'Er is iets misgegaan tijdens het verwijderen!',
-                  'error'
-              );
-          });
-      }
-  });
-}
-
-async function checkCameraFeed(httpAddress, key) {
-  try {
-    const response = await fetch(httpAddress, { method: "HEAD" });
-    if (response.ok) {
-      console.log(`Camera feed at "${httpAddress}" is reachable.`);
-      return true; // Feed is valid
-    } else {
-      throw new Error(`Camera feed unreachable: ${response.status} ${response.statusText}`);
-    }
-  } catch (error) {
-    console.error(`Error checking camera feed at "${httpAddress}":`, error);
-
-    // Send a DELETE request to remove the device with this IP
-    try {
-      const deleteResponse = await fetch('/delete-key', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ key }), // Pass the IP as the key
-      });
-
-      if (deleteResponse.ok) {
-        console.log(`Key (IP) "${key}" successfully deleted.`);
-      } else {
-        const deleteError = await deleteResponse.json();
-        console.error(`Failed to delete key (IP) "${key}":`, deleteError.error);
-      }
-    } catch (deleteError) {
-      console.error(`Error deleting key (IP) "${key}":`, deleteError);
-    }
-
-    return false; // Feed is invalid
-  }
-}
-
-
-// Function to start the countdown
-function startCounter(deviceIp) {
-  const counterElement = document.getElementById(`counter-${deviceIp}`);
-
-  let seconds = 0;
-  const interval = setInterval(() => {
-      const minutes = Math.floor(seconds / 60);
-      const displaySeconds = seconds % 60;
-      
-      // Format time as MM:SS
-      const timeString = `${minutes.toString().padStart(2, '0')}:${displaySeconds.toString().padStart(2, '0')}`;
-      
-      counterElement.textContent = timeString;
-
-      seconds += 1;
-
-      // Assuming iframe loads successfully, you can clear the interval
-      const iframe = counterElement.closest(".card").querySelector("iframe");
-      if (iframe && iframe.complete) {
-          clearInterval(interval); // Stop the counter when iframe finishes loading
-      }
-
-  }, 1000); // Increment every second
-}
-
-// Call `startCounter` for each device's IP after getting data
-function createCard(device, index) {
-   // Determine display name
-   const displayName = device.custom_name || device.ip;
-
-   // Determine card title label
-   const cardLabel = device.last_drive_time ? `${index + 1}#` : "Nog niet gereden";
- 
-   // Best time display
-   const bestTimeDisplay = device.best_time ? `Best Time: ${device.best_time}` : "Best Time: N/A";
-
-  
-  const cardContent = `
-    <div class="card-body">
-      <div class="form-check">
-        <input class="form-check-input" type="checkbox" value="" id="select-${device.ip}">
-        <label class="form-check-label" for="select-${device.ip}">
-          Select
-        </label>
-      </div>
-      <h5 class="card-title">${cardLabel}</h5>
-      <p class="card-text" id="card-text-${index}">
-        ${displayName}
-        <button class="btn mx-1 edit-btn" onclick="editCardName(${index}, '${device.ip}', '${displayName}')">
-          <i class="bi bi-pencil-square"></i>
-        </button>
-      </p>
-      <p class="card-text counter" id="counter-${device.ip}">00:00</p>
-      <p class="card-text best-time">${bestTimeDisplay}</p> <!-- Best Time Placeholder -->
-      <button onclick="stopCar('${device.ip}')">Stop car</button>
-    </div>
-    <iframe id="iframe${index + 1}" class="card-img-top" src="${device.camera_feed}" frameborder="0"></iframe>
-  `;
-
-  const card = document.createElement("div");
-  card.className = "card robotCar";
-  card.setAttribute("data-ip", device.ip);
-  card.style.width = "18rem";
-  card.innerHTML = cardContent;
-
-  return card;
-}
-
-function syncData() { 
-  fetch("/get-data")
-    .then((res) => res.json()) // Parse the response as JSON
-    .then((data) => {
-      if (Array.isArray(data)) {
-        const parentContainer = document.getElementById("card-container");
-        const existingCards = Array.from(parentContainer.getElementsByClassName("card"));
-
-        // Find card IPs from existing cards
-        const existingCardIPs = existingCards.map(card => card.getAttribute('data-ip'));
-
-        // Filter the new data to only get devices not present in existing cards
-        const newData = data.filter(device => !existingCardIPs.includes(device.ip));
-
-        // Append new cards
-        newData.forEach((device, index) => {
-          const card = createCard(device, index);
-          parentContainer.appendChild(card);
-        });
-
-        // Remove outdated cards
-        existingCards.forEach(card => {
-          const cardIP = card.getAttribute('data-ip');
-          if (!data.some(device => device.ip === cardIP)) {
-            card.remove();
-          }
-        });
-      } else {
-        console.error("Data is not an array.");
-      }
-    })
-    .catch((e) => console.error("Error:", e));
-}
+const parent = document.getElementsByClassName("robotCarContainer")[0];
 
 async function getData() {
   try {
     const response = await fetch("/get-data");
     const data = await response.json();
-
-    if (Array.isArray(data)) {
-      const parentContainer = document.getElementById("card-container");
-      parentContainer.innerHTML = ""; // Clear existing content
-
-      for (const [index, device] of data.entries()) {
-        const isFeedValid = true; //await checkCameraFeed(device.camera_feed, device.ip);
-        if (isFeedValid) {
-          const card = createCard(device, index);
-          parentContainer.appendChild(card);
-        } else {
-          console.warn(`Camera feed for device ${device.ip} is invalid. Skipping card creation.`);
-        }
-      }
-    } else {
-      console.error("Data is not an array.");
-    }
+    robotCarsData = data['RobotCarIDs']; // Store data in the global variable
   } catch (e) {
     console.error("Error fetching data:", e);
   }
 }
 
-function editCardName(index, deviceIp, currentName) {
-  Swal.fire({
-    title: 'Verander de naam van de robotauto!',
-    html: `
-      <form id="edit-name-form">
-        <label for="newName" style="display: block; margin-bottom: 8px;">Nieuwe naam:</label>
-        <input type="text" id="newName" class="swal2-input" value="${currentName}" required>
-      </form>
-    `,
-    showCancelButton: true,
-    confirmButtonText: 'Opslaan',
-    cancelButtonText: 'Annuleer',
-    preConfirm: () => {
-      const newName = document.getElementById('newName').value.trim();
-      if (!newName) {
-        Swal.showValidationMessage('Verander hier de naam in!');
-      }
-      return newName;
-    },
-  }).then((result) => {
-    if (result.isConfirmed) {
-      const updatedName = result.value;
+// Initialize the data
+getData().then(() => {
+  loadRobotCars();
+  orderCars();
+  console.log(carsTimer);
+});
 
-      // Make a PUT request to update the custom name in the backend
-      fetch('/update-custom-name', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ip: deviceIp,
-          custom_name: updatedName,
-        }),
-      })
-        .then((response) => {
-          if (response.ok) {
-            // Update the name in the DOM if successful
-            const cardTextElement = document.getElementById(`card-text-${index}`);
-            if (cardTextElement) {
-              cardTextElement.childNodes[0].textContent = updatedName; // Update only the name, not the button
-            }
-            Swal.fire('Success', 'De naam is succesvol aangepast!', 'success');
-          } else {
-            response.json().then((data) => {
-              Swal.fire('Error', data.error || 'Er is iets foutgegaan met het aanpassen van de naam!', 'error');
-            });
-          }
-        })
-        .catch((error) => {
-          Swal.fire('Error', 'Failed to communicate with the server', 'error');
-          console.error('Error:', error);
-        });
-    }
-  });
+function syncRobotCars() {
+  const parent = document.getElementsByClassName("robotCarContainer")[0];
+
+  console.log(parent.children);
+
+  // for(let i = 0; i < )
 }
 
-// Function to start selected robots
-function startSelectedCars() {
-  const selectedCards = document.querySelectorAll(".robotCar input.form-check-input:checked");
+function getUnactiveIps() {
+  let activeIps = carsTimer
+    .filter(item => item.active === false)
+    .map(item => item.ip);
 
-  selectedCards.forEach(card => {
-    const ip = card.closest('.robotCar').getAttribute('data-ip');
-    card.closest('.robotCar').style.border = "2px solid green"; // Apply green border
-    
-    // Start the counter for each card
-    const counterElement = document.getElementById(`counter-${ip}`);
-    if (counterElement) {
-      clearInterval(counterElement._interval);
-      let seconds = 0;
-      const interval = setInterval(() => {
-        const minutes = Math.floor(seconds / 60);
-        const displaySeconds = seconds % 60;
-        
-        // Format time as MM:SS
-        const timeString = `${minutes.toString().padStart(2, '0')}:${displaySeconds.toString().padStart(2, '0')}`;
-        
-        counterElement.textContent = timeString;
-
-        seconds += 1;
-
-        // Assuming iframe loads successfully, you can clear the interval
-        const iframe = card.closest('.robotCar').querySelector("iframe");
-        if (iframe && iframe.complete) {
-          clearInterval(interval); // Stop the counter when iframe finishes loading
-        }
-
-      }, 1000); // Increment every second
-
-      // Store the interval in a custom property for stopping individually
-      counterElement._interval = interval;
-    }
-  });
+  return activeIps;
 }
 
-// Function to start all car counters
-function startAllCars() {
-  const greenCards = document.querySelectorAll(".robotCar");
-  
-  greenCards.forEach(card => {
-    card.style.border = "2px solid green"; // Apply green border
-    
-    // Start the counter for each card
-    const counterElement = card.querySelector(".counter");
-    if (counterElement) {
-      clearInterval(counterElement._interval);
-      let seconds = 0;
-      const interval = setInterval(() => {
-        const minutes = Math.floor(seconds / 60);
-        const displaySeconds = seconds % 60;
-        
-        // Format time as MM:SS
-        const timeString = `${minutes.toString().padStart(2, '0')}:${displaySeconds.toString().padStart(2, '0')}`;
-        
-        counterElement.textContent = timeString;
-
-        seconds += 1;
-
-        // Assuming iframe loads successfully, you can clear the interval
-        const iframe = card.querySelector("iframe");
-        if (iframe && iframe.complete) {
-          clearInterval(interval); // Stop the counter when iframe finishes loading
-        }
-
-      }, 1000); // Increment every second
-
-      // Store the interval in a custom property for stopping individually
-      counterElement._interval = interval;
-    }
-  });
-}
-
-// Function to stop an individual car counter
-function stopCar(ip) {
-  const card = document.querySelector(`.robotCar[data-ip="${ip}"]`);
-  if (card) {
-    const counterElement = document.getElementById(`counter-${ip}`);
-    console.log(counterElement);
-    if (counterElement) {
-      clearInterval(counterElement._interval); // Clear the specific interval
-    }
-    card.style.border = ""; // Remove green border
+function setActive(ip, status) {
+  let car = carsTimer.find(item => item.ip === ip);
+  if (car) {
+    car.active = status;
   }
-  setTimeout(function() {
-    sortCardsByTime();
-  },1000);
 }
 
-function sortCardsByTime() {
-  // Select all robotCar cards
-  const cards = document.querySelectorAll(".robotCar");
+function startAllCars() {
+  for(let i = 0; i < parent.children.length; i++) {
+    let robotCarIp = parent.children[i].id;
+    // startCarByIp(robotCarIp);
+    
+    startTimer(robotCarIp);
+    setActive(robotCarIp, true);
+  }
+}
 
-  // Convert NodeList to array for sorting
-  const cardArray = Array.from(cards);
+function stopCar(ip) {
+  let carIp = "http://" + ip + "/stopRobot";
+  try {
+    // fetch(carIp, {
+    //   method: "POST",
+    //   mode: "no-cors",
+    //   headers: {
+    //     "Content-Type": "application/json"
+    //   }
+    // });
+    orderCars();
+    stopTimer(ip);
+    console.log(carsTimer);
+    setActive(ip, false);
+    
+  }
+  catch (e) {
+    console.error("Couldn't stop car:", e);
+  }
+}
 
-  // Sort cards based on the counter value and maintain relative order for ties
-  cardArray.sort((a, b) => {
-    const positionA = parseInt(a.querySelector(".card-title").textContent.replace('#', '').trim());
-    const positionB = parseInt(b.querySelector(".card-title").textContent.replace('#', '').trim());
-
-    const timeA = a.querySelector(".counter").textContent;
-    const timeB = b.querySelector(".counter").textContent;
-
-    // Convert times to seconds for comparison
-    const [minutesA, secondsA] = timeA.split(":").map(Number);
-    const [minutesB, secondsB] = timeB.split(":").map(Number);
-
-    // Calculate total seconds for sorting
-    const totalSecondsA = minutesA * 60 + secondsA;
-    const totalSecondsB = minutesB * 60 + secondsB;
-
-    if (totalSecondsA === totalSecondsB) {
-      // If times are the same, maintain their current relative order based on original position
-      return positionA - positionB;
+function startAllSelectedCars() {
+  let robotCars = document.querySelectorAll(".selectRobotCar");
+  for(let i = 0; i < robotCars.length; i++) {
+    let selected = robotCars[i].checked;
+    if(selected) {
+      let ip = robotCars[i].getAttribute("data-robot_ip");
+      // startCarByIp(ip);
+      startTimer(ip);
+      setActive(ip, true);
     }
+  }
+  console.log(carsTimer);
+}
 
-    return totalSecondsA - totalSecondsB; // Ascending order (lowest time first)
+function editCustomName(robotCarId) {
+  Swal.fire({
+    title: "Bewerk de naam van de robot:",
+    input: "text",
+    confirmButtonText: "Bevestig",
+    cancelButtonText: "Annuleer",
+    showCancelButton: true,
+    showCloseButton: true,
+    preConfirm: (customName) => {
+      if(customName == "") {
+        Swal.fire({
+          icon: "error",
+          title: "Het invoerveld mag niet leeg zijn..."
+        });
+      }
+      else {
+        console.log(customName);
+        try {
+          const response = fetch("/updateCustomName", {
+            method: "PUT",
+            body: JSON.stringify({
+              robotCarId: robotCarId,
+              customRobotName: customName
+            }),
+            headers: {
+              "Content-Type": "application/json"
+            }
+          });
+          console.log(response);
+          Swal.fire({
+            icon: "success",
+            title: "Robotnaam is veranderd!"
+          });
+        }
+        catch (e) {
+          Swal.fire({
+            icon: "error",
+            title: "Er is iets fout gegaan"
+          });
+        }
+      }
+    }
   });
+}
 
-  // Update the card titles to reflect their new positions
-  cardArray.forEach((card, index) => {
-    const cardTitle = card.querySelector(".card-title");
-    cardTitle.textContent = `${index + 1}#`; // Update position
+function stopTimer(ip) {
+  const robotCar = document.getElementById(ip);
+  robotCar.style.borderColor = "rgba(0, 0, 0, 0.176)";
+  let car = carsTimer.find(item => item.ip === ip);
+  if (car) {
+    if (car.active) {
+      if (!car.interval) {
+        car.interval = clearInterval();
+        console.log(`Interval started for car with IP: ${ip}`);
+      } else {
+        console.log(`Interval already running for car with IP: ${ip}`);
+      }
+    } else {
+      console.log(`Car with IP ${ip} is not active.`);
+    }
+  } else {
+    console.log(`Car with IP ${ip} not found.`);
+  }
+}
+
+function startTimer(ip) {
+  const robotCar = document.getElementById(ip);
+  robotCar.style.borderColor = "green";
+  const timer = robotCar.querySelector(".timer");
+  console.log(timer);
+  let car = carsTimer.find(item => item.ip === ip);
+  if (car) {
+    if (car.active) {
+      if (!car.interval) {
+        car.interval = setInterval(() => {
+          console.log(`Timer for car with IP ${ip} is running...`);
+        }, 1000);
+      } else {
+        console.log(`Interval already running for car with IP: ${ip}`);
+      }
+    } else {
+      console.log(`Car with IP ${ip} is not active.`);
+    }
+  } else {
+    console.log(`Car with IP ${ip} not found.`);
+  }
+}
+
+function orderCars() {
+  const allRobotCars = document.querySelectorAll(".robotCar");
+
+  var timerList = [];
+  for(let i = 0; i < allRobotCars.length; i++) {
+    let timer = allRobotCars[i].querySelector(".timer").innerText;
+    let timerSplit = timer.split(":");
+    let seconds = (timerSplit[0]*60) + timerSplit[1];
+
+    timerList.push([{
+      timer: timer,
+      seconds: seconds,
+      robotCarIp: allRobotCars[i].id
+    }]);
+  }
+
+  timerList.sort((a, b) => {
+    return parseInt(a[0].seconds) - parseInt(b[0].seconds);
+  })
+
+  for(let i = 0; i < allRobotCars.length; i++) {
+    let robotcarIp = timerList[i][0].robotCarIp;
+    const robotCarElement = document.getElementById(robotcarIp);
+    robotCarElement.querySelector(".position").innerText = i+1;
+    parent.appendChild(robotCarElement);
+  }
+}
+
+function startCarByIp(ip) {
+  let module = document.getElementById("modulePicker").value;
+  let carIp = "http://" + ip + "/startRobot";
+  console.log(carIp);
+  try {
+    fetch(carIp, {
+      method: "POST",
+      mode: "no-cors",
+      body: JSON.stringify({
+        module: module
+      }),
+      headers: {
+        "Content-Type": "application/json"
+      }
+    })
+  }
+  catch (e) {
+    console.error("Couldn't start car:", e);
+  }
+}
+
+
+function loadRobotCars() {
+  for (const i in robotCarsData) {
+    let robotCar = robotCarsData[i];
+    carsTimer.push({
+      ip: robotCar['Arduino'].ip,
+      active: false,
+      interval: null
+    });
+    let card = `
+        <div id="` + robotCar['Arduino'].ip + `" class="robotCar mx-2 col card">
+          <div class="card-body">
+            <div class="row">
+              <div class="position card-title"></div>
+            </div>
+            <div class="row form-check">
+              <div class="col">
+                <label class="form-check-label">Selecteer robotauto</label>
+                <input class="form-check-input selectRobotCar" data-robot_ip="` + robotCar['Arduino'].ip + `" type="checkbox"></input>
+              </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                  <h5 class="card-title">` + (robotCar.customName != undefined ? robotCar.customName : robotCar.ip) + `</h5>
+                  <a class="btn col" onclick="editCustomName(` + i + `)">
+                    <i class="bi bi-pencil-square"></i>
+                  </a>
+                </div>
+                <div id="timer_` + robotCar.ip + `" class="timer">
+                  00:00
+                </div>
+                <div>
+                  Beste tijd: ` + ((robotCar.bestTime != undefined) ? robotCar.bestTime : "NaN") + `
+                </div>
+            </div>
+            <iframe onload="cameraStreamAdjuster(this)" src="` + robotCar.camera_feed + `" class="card-img-top"></iframe>
+            <div class="row">
+              <div class="col">
+                <a onclick="stopCar('` + robotCar['Arduino'].ip + `')" class="btn btn-danger">Stop robotauto</a>
+              </div>
+            </div>
+          </div>
+        </div>
+    `;
+    parent.innerHTML += card;
+    currentRobots.push(i);
+  }
+}
+
+function cameraStreamAdjuster(iframe) {
+  iframe.style.height = iframe.contentWindow.document.documentElement.scrollHeight + 'px';
+}
+
+function deleteRobotCars() {
+  Swal.fire({
+      title: "Weet je zeker dat je alle robotauto's wilt verwijderen?",
+      icon: "question",
+      iconHtml: "!",
+      confirmButtonText: "Verwijder",
+      cancelButtonText: "Annuleer",
+      showCancelButton: true,
+      showCloseButton: true
   });
-
-  // Append sorted cards to the parent container
-  const parentContainer = document.getElementById("card-container");
-  parentContainer.innerHTML = ""; // Clear existing content
-  cardArray.forEach(card => parentContainer.appendChild(card));
-
 }
