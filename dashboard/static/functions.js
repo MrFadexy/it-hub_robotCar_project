@@ -48,28 +48,26 @@ function setActive(ip, status) {
 function startAllCars() {
   for(let i = 0; i < parent.children.length; i++) {
     let robotCarIp = parent.children[i].id;
-    // startCarByIp(robotCarIp);
+    startCarByIp(robotCarIp);
     
-    startTimer(robotCarIp);
     setActive(robotCarIp, true);
+    startTimer(robotCarIp);
   }
 }
 
-function stopCar(ip) {
+function stopCar(robotId, ip) {
   let carIp = "http://" + ip + "/stopRobot";
   try {
-    // fetch(carIp, {
-    //   method: "POST",
-    //   mode: "no-cors",
-    //   headers: {
-    //     "Content-Type": "application/json"
-    //   }
-    // });
+    fetch(carIp, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
     orderCars();
-    stopTimer(ip);
-    console.log(carsTimer);
+    stopTimer(robotId, ip);
     setActive(ip, false);
-    
   }
   catch (e) {
     console.error("Couldn't stop car:", e);
@@ -82,15 +80,14 @@ function startAllSelectedCars() {
     let selected = robotCars[i].checked;
     if(selected) {
       let ip = robotCars[i].getAttribute("data-robot_ip");
-      // startCarByIp(ip);
-      startTimer(ip);
+      startCarByIp(ip);
       setActive(ip, true);
+      startTimer(ip);
     }
   }
-  console.log(carsTimer);
 }
 
-function editCustomName(robotCarId) {
+function editCustomName(robotCarId, ip) {
   Swal.fire({
     title: "Bewerk de naam van de robot:",
     input: "text",
@@ -106,7 +103,6 @@ function editCustomName(robotCarId) {
         });
       }
       else {
-        console.log(customName);
         try {
           const response = fetch("/updateCustomName", {
             method: "PUT",
@@ -118,32 +114,64 @@ function editCustomName(robotCarId) {
               "Content-Type": "application/json"
             }
           });
-          console.log(response);
           Swal.fire({
             icon: "success",
             title: "Robotnaam is veranderd!"
           });
+          console.log(ip);
+          let car = document.getElementById(ip);
+          console.log(car);
+          let carTitle = car.querySelector(".robotName");
+          carTitle.innerText = customName;
         }
         catch (e) {
           Swal.fire({
             icon: "error",
             title: "Er is iets fout gegaan"
           });
+          console.log(e);
         }
       }
     }
   });
 }
 
-function stopTimer(ip) {
+async function stopTimer(robotId, ip) {
   const robotCar = document.getElementById(ip);
   robotCar.style.borderColor = "rgba(0, 0, 0, 0.176)";
   let car = carsTimer.find(item => item.ip === ip);
   if (car) {
     if (car.active) {
-      if (!car.interval) {
-        car.interval = clearInterval();
-        console.log(`Interval started for car with IP: ${ip}`);
+      if (car.interval) {
+        clearInterval(car.interval);
+        car.interval = null;
+        const robotCar = document.getElementById(ip);
+        const timer = robotCar.querySelector(".timer");
+        try {
+          let response = await fetch("/updateBestTime", {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              ip: ip,
+              currentTime: timer.innerText,
+              robotId: robotId
+            })
+          });
+          const responseStatus = await response.json();
+          if(responseStatus.success) {
+            document.getElementById(`bestTime_${ip}`).innerText = "Beste tijd: " + timer.innerText;
+          }
+          document.getElementById(`lastTime_${ip}`).innerText = "Laatste tijd: " + timer.innerText;
+          timer.innerText = "00:00";
+          orderCars();
+          stopTimer(ip);
+          setActive(ip, false);
+        }
+        catch (e) {
+          console.error("Couldn't stop car:", e);
+        }
       } else {
         console.log(`Interval already running for car with IP: ${ip}`);
       }
@@ -164,8 +192,29 @@ function startTimer(ip) {
   if (car) {
     if (car.active) {
       if (!car.interval) {
+        const timer = document.getElementById(`timer_${ip}`);
+        let currentTime = timer.innerText;
+        let getTime = currentTime.split(":");
+
         car.interval = setInterval(() => {
-          console.log(`Timer for car with IP ${ip} is running...`);
+          if(getTime[1] >= 59) {
+            getTime[0]++;
+            getTime[1] = -1;
+          }
+          getTime[1]++;
+          console.log(getTime);
+
+          let textTime = [String(getTime[0]), String(getTime[1])];
+          if(textTime[0].length === 1) {
+            textTime[0] = "0" + textTime[0];
+          }
+          if(textTime[1].length === 1){
+            textTime[1] = "0" + textTime[1];
+          }
+          console.log(textTime);
+          timer.innerText = textTime.join(":");
+          console.log(textTime.join(":"));
+          console.log(timer.innerText);
         }, 1000);
       } else {
         console.log(`Interval already running for car with IP: ${ip}`);
@@ -231,53 +280,58 @@ function startCarByIp(ip) {
 function loadRobotCars() {
   for (const i in robotCarsData) {
     let robotCar = robotCarsData[i];
-    carsTimer.push({
-      ip: robotCar['Arduino'].ip,
-      active: false,
-      interval: null
-    });
-    let card = `
-        <div id="` + robotCar['Arduino'].ip + `" class="robotCar mx-2 col card">
-          <div class="card-body">
-            <div class="row">
-              <div class="position card-title"></div>
-            </div>
-            <div class="row form-check">
-              <div class="col">
-                <label class="form-check-label">Selecteer robotauto</label>
-                <input class="form-check-input selectRobotCar" data-robot_ip="` + robotCar['Arduino'].ip + `" type="checkbox"></input>
+    if(robotCar.ip != null && robotCar['Arduino'].ip != null) {
+      carsTimer.push({
+        ip: robotCar['Arduino'].ip,
+        active: false,
+        interval: null
+      });
+      let card = `
+          <div id="` + robotCar['Arduino'].ip + `" class="robotCar mx-2 col card">
+            <div class="card-body">
+              <div class="row">
+                <div class="position card-title"></div>
               </div>
-            </div>
-            <div class="row">
+              <div class="row form-check">
                 <div class="col">
-                  <h5 class="card-title">` + (robotCar.customName != undefined ? robotCar.customName : robotCar.ip) + `</h5>
-                  <a class="btn col" onclick="editCustomName(` + i + `)">
-                    <i class="bi bi-pencil-square"></i>
-                  </a>
+                  <label class="form-check-label">Selecteer robotauto</label>
+                  <input class="form-check-input selectRobotCar" data-robot_ip="` + robotCar['Arduino'].ip + `" type="checkbox"></input>
                 </div>
-                <div id="timer_` + robotCar.ip + `" class="timer">
-                  00:00
+              </div>
+              <div class="row">
+                  <div class="col">
+                    <h5 class="card-title robotName">` + (robotCar.customName != undefined ? robotCar.customName : robotCar.ip) + `</h5>
+                    <a class="btn col" onclick="editCustomName(` + i + `, '` + robotCar['Arduino'].ip + `')">
+                      <i class="bi bi-pencil-square"></i>
+                    </a>
+                  </div>
+                  <div id="timer_` + robotCar['Arduino'].ip + `" class="timer">
+                    00:00
+                  </div>
+                  <div id="bestTime_` + robotCar['Arduino'].ip + `">
+                    Beste tijd: ` + ((robotCar.bestTime != undefined) ? robotCar.bestTime : "-") + `
+                  </div>
+                  <div id="lastTime_` + robotCar['Arduino'].ip + `">
+                    Laatste tijd: -
+                  </div>
+              </div>
+              <img src="` + robotCar.camera_feed + `" class="card-img-top" onerror="loadFallbackImg(this)></img>
+              <div class="row">
+                <div class="col">
+                  <a onclick="stopCar('` + i + `', '` + robotCar['Arduino'].ip + `')" class="btn btn-danger">Stop robotauto</a>
                 </div>
-                <div>
-                  Beste tijd: ` + ((robotCar.bestTime != undefined) ? robotCar.bestTime : "NaN") + `
-                </div>
-            </div>
-            <iframe onload="cameraStreamAdjuster(this)" src="` + robotCar.camera_feed + `" class="card-img-top"></iframe>
-            <div class="row">
-              <div class="col">
-                <a onclick="stopCar('` + robotCar['Arduino'].ip + `')" class="btn btn-danger">Stop robotauto</a>
               </div>
             </div>
           </div>
-        </div>
-    `;
-    parent.innerHTML += card;
-    currentRobots.push(i);
+      `;
+      parent.innerHTML += card;
+      currentRobots.push(i);
+    }
   }
 }
 
-function cameraStreamAdjuster(iframe) {
-  iframe.style.height = iframe.contentWindow.document.documentElement.scrollHeight + 'px';
+function loadFallbackImg(self) {
+  self.src = "";
 }
 
 function deleteRobotCars() {
@@ -288,6 +342,27 @@ function deleteRobotCars() {
       confirmButtonText: "Verwijder",
       cancelButtonText: "Annuleer",
       showCancelButton: true,
-      showCloseButton: true
+      showCloseButton: true,
+      preConfirm: () => {
+        try {
+          fetch("/deleteAllData", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            }
+          });
+          Swal.fire({
+            icon: "success",
+            title: "Robotauto's zijn verwijderd!"
+          });
+        }
+        catch (e) {
+          Swal.fire({
+            icon: "warning",
+            title: "Er is iets foutgegaan!"
+          });
+          console.log(e);
+        }
+      }
   });
 }

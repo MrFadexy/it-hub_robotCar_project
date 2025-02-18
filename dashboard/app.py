@@ -49,20 +49,14 @@ def update_custom_name():
         file_path = get_data_file_path()
         data = request.get_json()
         robot_car_id = data.get('robotCarId')
-        new_custom_name = data.get('customRobotName')
+        customRobotName = data.get('customRobotName')
 
-        print(robot_car_id)
-        print(new_custom_name)
-        if new_custom_name != '' and robot_car_id != '':
+        if customRobotName != '' and robot_car_id != '':
             
 
             with open(file_path, 'r') as json_file:
                 data = json.load(json_file)
-
-                print(new_custom_name)
-                # data['RobotCarIDs'][str(robot_car_id)]['customName'] = customRobotName
-                print(data['RobotCarIDs'][str(robot_car_id)]['customName'])
-
+                data['RobotCarIDs'][str(robot_car_id)]['customName'] = customRobotName
                 with open(file_path, 'w') as json_file:
                     json.dump(data, json_file, indent=2)
                     return jsonify({'message': 'Custom name updated'}), 200
@@ -74,16 +68,17 @@ def update_custom_name():
     except json.JSONDecodeError:
         return jsonify({"error": "Error decoding JSON"}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(e)
+        return jsonify({"error": str(e)}), 501
 
     
-@app.route('/clear-data', methods=['POST'])
+@app.route('/deleteAllData', methods=['POST'])
 def clear_data():
     file_path = get_data_file_path()
 
     try:
         with open(file_path, 'w') as json_file:
-            json.dump([], json_file)  # Write an empty list to the file
+            json.dump({"RobotCarIDs" : {}}, json_file, indent=2)
         return jsonify({"message": "Data cleared successfully"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -132,16 +127,17 @@ def delete_key():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/update-best-time', methods=['PUT'])
+@app.route('/updateBestTime', methods=['PUT'])
 def update_best_time():
     data = request.get_json()
     ip = data.get('ip')
-    new_best_time = data.get('best_time')
+    robotId = data.get('robotId')
+    currentTime = data.get('currentTime')
 
-    # Debugging: Log the received data
-    print(f"Received data: IP = {ip}, Best Time = {new_best_time}")
+    print(currentTime)
+    print(ip)
 
-    if not ip or not new_best_time:
+    if not ip or not currentTime:
         return jsonify({'error': 'IP and best_time are required'}), 400
 
     # Load existing data
@@ -151,13 +147,18 @@ def update_best_time():
 
     # Find the robot car by IP and update the best time
     for robot_id, robot in robot_data['RobotCarIDs'].items():
-        if robot['ip'] == ip:
-            # Debugging: Log the current best time before updating
-            print(f"Current best time for {ip}: {robot.get('best_time')}")
-            robot['best_time'] = new_best_time
-            # Debugging: Log the new best time after updating
-            print(f"Updated best time for {ip}: {new_best_time}")
-            break
+        if robot['Arduino']['ip'] == ip:
+            if('bestTime' in robot_data['RobotCarIDs'][str(robotId)]):
+                if(currentTime < robot['bestTime']):
+                    robot['bestTime'] = currentTime
+                    status = jsonify({'success': True})
+                    break
+                else:
+                    return jsonify({'success': False})
+            else:
+                robot['bestTime'] = currentTime
+                status = jsonify({'success': True})
+                break
     else:
         return jsonify({'error': 'Robot car not found'}), 404
 
@@ -165,7 +166,7 @@ def update_best_time():
     with open(file_path, 'w') as f:
         json.dump(robot_data, f, indent=4)
 
-    return jsonify({'message': 'Best time updated successfully'}), 200
+    return status, 200
 
 
 @app.route("/")
