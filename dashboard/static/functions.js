@@ -1,4 +1,4 @@
-let robotCarsData; // Declare it globally
+var robotCarsData;
 var currentRobots = [];
 let timer = false;
 let carsTimer = [];
@@ -9,7 +9,8 @@ async function getData() {
   try {
     const response = await fetch("/get-data");
     const data = await response.json();
-    robotCarsData = data['RobotCarIDs']; // Store data in the global variable
+    robotCarsData = data['RobotCarIDs'];
+    console.log(robotCarsData);
   } catch (e) {
     console.error("Error fetching data:", e);
   }
@@ -17,17 +18,55 @@ async function getData() {
 
 // Initialize the data
 getData().then(() => {
-  loadRobotCars();
+  loadRobotCars(robotCarsData);
   orderCars();
-  console.log(carsTimer);
 });
 
 function syncRobotCars() {
-  const parent = document.getElementsByClassName("robotCarContainer")[0];
-
-  console.log(parent.children);
-
-  // for(let i = 0; i < )
+  getData().then(() => {
+    const parent = document.getElementsByClassName("robotCarContainer")[0];
+    let allCurrentIds = [];
+    for(let i = 0; i < parent.children.length; i++) {
+      let robotCarId = parent.children[i].getAttribute("data_robot-car-id");
+      allCurrentIds.push(robotCarId);
+    }
+    let robotCarIds = Object.keys(robotCarsData);
+    
+    if(robotCarIds.length >= allCurrentIds.length) {
+      let removeFromCurrent = allCurrentIds;
+      for(let i = 0; i < robotCarIds.length; i++) {
+        if(!allCurrentIds.includes(robotCarIds[i])) {
+          let key = robotCarIds[i];
+          let robotData = robotCarsData[parseInt(robotCarIds[i])];
+          loadRobotCars({[key]: robotData});
+        }
+        else {
+          removeFromCurrent = removeFromCurrent.filter((id) => id != robotCarIds[i]);
+        }
+      }
+      for(let i = 0; i < removeFromCurrent.length; i++) {
+        parent.querySelectorAll(`[data_robot-car-id="${removeFromCurrent[i]}"]`)[0].remove();
+        carsTimer = carsTimer.filter((item) => item.carId != removeFromCurrent[i]);
+      }
+    }
+    else {
+      let addToCurrent = robotCarIds;
+      for(let i = 0; i < allCurrentIds.length; i++) {
+        if(!robotCarIds.includes(allCurrentIds[i])) {
+          parent.querySelectorAll(`[data_robot-car-id="${allCurrentIds[i]}"]`)[0].remove();
+          carsTimer = carsTimer.filter((item) => item.carId != allCurrentIds[i]);
+        }
+        else {
+          addToCurrent = addToCurrent.filter((id) => id != allCurrentIds[i]);
+        }
+      }
+      for(let i = 0; i < addToCurrent.length; i++) {
+        let key = addToCurrent[i];
+        let robotData = robotCarsData[parseInt(addToCurrent[i])];
+        loadRobotCars({[key]: robotData});
+      }
+    }  
+  });
 }
 
 function getUnactiveIps() {
@@ -118,9 +157,7 @@ function editCustomName(robotCarId, ip) {
             icon: "success",
             title: "Robotnaam is veranderd!"
           });
-          console.log(ip);
           let car = document.getElementById(ip);
-          console.log(car);
           let carTitle = car.querySelector(".robotName");
           carTitle.innerText = customName;
         }
@@ -187,7 +224,6 @@ function startTimer(ip) {
   const robotCar = document.getElementById(ip);
   robotCar.style.borderColor = "green";
   const timer = robotCar.querySelector(".timer");
-  console.log(timer);
   let car = carsTimer.find(item => item.ip === ip);
   if (car) {
     if (car.active) {
@@ -202,7 +238,6 @@ function startTimer(ip) {
             getTime[1] = -1;
           }
           getTime[1]++;
-          console.log(getTime);
 
           let textTime = [String(getTime[0]), String(getTime[1])];
           if(textTime[0].length === 1) {
@@ -211,10 +246,7 @@ function startTimer(ip) {
           if(textTime[1].length === 1){
             textTime[1] = "0" + textTime[1];
           }
-          console.log(textTime);
           timer.innerText = textTime.join(":");
-          console.log(textTime.join(":"));
-          console.log(timer.innerText);
         }, 1000);
       } else {
         console.log(`Interval already running for car with IP: ${ip}`);
@@ -258,7 +290,6 @@ function orderCars() {
 function startCarByIp(ip) {
   let module = document.getElementById("modulePicker").value;
   let carIp = "http://" + ip + "/startRobot";
-  console.log(carIp);
   try {
     fetch(carIp, {
       method: "POST",
@@ -277,17 +308,18 @@ function startCarByIp(ip) {
 }
 
 
-function loadRobotCars() {
-  for (const i in robotCarsData) {
+function loadRobotCars(carData) {
+  for (const i in carData) {
     let robotCar = robotCarsData[i];
     if(robotCar.ip != null && robotCar['Arduino'].ip != null) {
       carsTimer.push({
+        carId: i,
         ip: robotCar['Arduino'].ip,
         active: false,
         interval: null
       });
       let card = `
-          <div id="` + robotCar['Arduino'].ip + `" class="robotCar mx-2 col card">
+          <div data_robot-car-id="` + i + `" id="` + robotCar['Arduino'].ip + `" class="robotCar mx-2 col card">
             <div class="card-body">
               <div class="row">
                 <div class="position card-title"></div>
@@ -315,7 +347,7 @@ function loadRobotCars() {
                     Laatste tijd: -
                   </div>
               </div>
-              <img src="` + robotCar.camera_feed + `" class="card-img-top" onerror="loadFallbackImg(this)></img>
+              <img id="image_` + i + `" src="` + robotCar.camera_feed + `" class="card-img-top">
               <div class="row">
                 <div class="col">
                   <a onclick="stopCar('` + i + `', '` + robotCar['Arduino'].ip + `')" class="btn btn-danger">Stop robotauto</a>
@@ -330,8 +362,21 @@ function loadRobotCars() {
   }
 }
 
-function loadFallbackImg(self) {
-  self.src = "";
+function deleteRobotCar(robotId) {
+  try {
+    fetch("/deleteRobotCarById", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        id: robotId
+      }),
+    });
+  }
+  catch (e) {
+    console.log(e);
+  }
 }
 
 function deleteRobotCars() {

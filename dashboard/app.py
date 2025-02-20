@@ -96,36 +96,12 @@ def get_data():
     except json.JSONDecodeError:
         return jsonify({"error": "Error decoding JSON"}), 500
 
-@app.route('/delete-key', methods=['DELETE'])
+@app.route('/deleteRobotCarById', methods=['DELETE'])
 def delete_key():
     file_path = get_data_file_path()
-    key_to_delete = request.json.get('key')  # Expecting the key in the request body
+    key_to_delete = request.json.get('robotId')  # Expecting the key in the request body
 
-    try:
-        # Read the current data
-        with open(file_path, 'r') as json_file:
-            data = json.load(json_file)
-
-        # Check if data is a dictionary or a list of dictionaries
-        if isinstance(data, dict):
-            if key_to_delete in data:
-                del data[key_to_delete]
-            else:
-                return jsonify({"error": f"Key '{key_to_delete}' not found"}), 404
-        elif isinstance(data, list):
-            data = [item for item in data if item.get('key') != key_to_delete]
-
-        # Write the updated data back to the file
-        with open(file_path, 'w') as json_file:
-            json.dump(data, json_file, indent=2)
-
-        return jsonify({"message": f"Key '{key_to_delete}' deleted successfully"}), 200
-    except FileNotFoundError:
-        return jsonify({"error": "data.json file not found"}), 404
-    except json.JSONDecodeError:
-        return jsonify({"error": "Error decoding JSON"}), 500
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    print("Yeet")
 
 @app.route('/updateBestTime', methods=['PUT'])
 def update_best_time():
